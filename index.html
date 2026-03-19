@@ -894,6 +894,11 @@
     return err.message ? err.message.slice(0, 120) : 'Unknown error — retry or check the PDF.';
   }
 
+  function updateBatchRunBtn(text) {
+    const btn = document.getElementById('batchRunBtn');
+    if (btn) btn.textContent = text;
+  }
+
   async function runBatch() {
     if (!getApiKey()) { showApiKeyBanner(); showError('Please enter your Anthropic API key to continue.'); return; }
     if (!batchFiles.length) return;
@@ -911,6 +916,7 @@
       item.status = 'running';
       item.error = null;
       updateBatchRow(idx);
+      updateBatchRunBtn(`⏳ Processing ${idx + 1} of ${batchFiles.length}…`);
 
       try {
         const base64 = await readFileAsBase64(item.file);
@@ -987,6 +993,16 @@
       }
 
       updateBatchRow(idx);
+
+      // Pause between files to avoid hitting API rate limits.
+      // Skip the pause after the last file.
+      if (idx < batchFiles.length - 1) {
+        const nextItem = batchFiles[idx + 1];
+        if (nextItem && nextItem.status !== 'done') {
+          updateBatchRunBtn(`⏳ Waiting 15s before next file…`);
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        }
+      }
     }
 
     // Show summary
