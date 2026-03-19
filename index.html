@@ -122,6 +122,7 @@
   .batch-spinner { width: 13px; height: 13px; border: 2px solid var(--cream); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
   .batch-summary { background: var(--teal-light); border: 1.5px solid rgba(42,127,111,0.25); border-radius: 10px; padding: 1rem 1.25rem; font-size: 0.85rem; color: var(--teal); margin-top: 1rem; line-height: 1.6; }
   .batch-summary.has-errors { background: var(--conf-low-bg); border-color: #f5c6be; color: var(--accent); }
+  .batch-error-msg { font-size: 0.75rem; color: var(--accent); font-weight: 400; margin-top: 0.25rem; line-height: 1.4; }
   .btn-finalize { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 0.65rem 1.4rem; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 0.4rem; }
   .btn-finalize:hover { background: #b04433; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(200,85,61,0.3); }
 
@@ -838,16 +839,30 @@
       waiting: `<span class="batch-status waiting">⏳ Waiting</span>`,
       running: `<span class="batch-status running"><span class="batch-spinner"></span> Generating…</span>`,
       done:    `<span class="batch-status done">✓ Saved</span>`,
-      error:   `<span class="batch-status error" title="${item.error || ''}">✕ Failed</span>`
+      error:   `<span class="batch-status error">✕ Failed</span>`
     }[item.status];
 
     // Disable NCT input once processing starts
     const input = row.querySelector('.batch-nct-input');
     if (input && item.status !== 'waiting') input.disabled = true;
 
-    const statusEl = row.querySelector('.batch-status');
-    if (statusEl) statusEl.outerHTML = statusHTML;
-    else row.insertAdjacentHTML('beforeend', statusHTML);
+    // Update status cell
+    const existingStatus = row.querySelector('.batch-status');
+    if (existingStatus) existingStatus.outerHTML = statusHTML;
+
+    // Show or hide inline error message below the filename
+    let errEl = row.querySelector('.batch-error-msg');
+    if (item.status === 'error' && item.error) {
+      if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.className = 'batch-error-msg';
+        const filenameEl = row.querySelector('.batch-filename');
+        if (filenameEl) filenameEl.appendChild(errEl);
+      }
+      errEl.textContent = '⚠ ' + item.error;
+    } else if (errEl) {
+      errEl.remove();
+    }
   }
 
   function readFileAsBase64(file) {
@@ -857,6 +872,26 @@
       reader.onerror = () => reject(new Error('Could not read file'));
       reader.readAsDataURL(file);
     });
+  }
+
+  function batchFriendlyError(err) {
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('401') || msg.includes('authentication') || msg.includes('api key') || msg.includes('invalid x-api-key'))
+      return 'Invalid API key — check your key and try again.';
+    if (msg.includes('429') || msg.includes('rate limit') || msg.includes('overloaded'))
+      return 'API rate limit reached — wait a minute and retry.';
+    if (msg.includes('could not read') || msg.includes('filereader'))
+      return 'Could not read the PDF file — it may be corrupted.';
+    if (msg.includes('json') || msg.includes('parse') || msg.includes('unexpected token'))
+      return 'The AI response couldn\'t be parsed — the PDF may not contain enough readable text.';
+    if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed'))
+      return 'Network error — check your internet connection and retry.';
+    if (msg.includes('413') || msg.includes('too large') || msg.includes('request entity'))
+      return 'PDF is too large for the API — try a smaller file.';
+    if (msg.includes('500') || msg.includes('529') || msg.includes('server'))
+      return 'Anthropic server error — wait a moment and retry.';
+    // Fall back to the raw message if we don't recognise it, but clean it up
+    return err.message ? err.message.slice(0, 120) : 'Unknown error — retry or check the PDF.';
   }
 
   async function runBatch() {
@@ -874,6 +909,7 @@
       const item = batchFiles[idx];
       if (item.status === 'done') { doneCount++; continue; } // skip already-done
       item.status = 'running';
+      item.error = null;
       updateBatchRow(idx);
 
       try {
@@ -910,7 +946,12 @@
         const data  = await response.json();
         const raw   = data.content.map(b => b.text || '').join('').trim();
         const clean = raw.replace(/```json|```/g, '').trim();
-        let parsed  = JSON.parse(clean);
+        let parsed;
+        try {
+          parsed = JSON.parse(clean);
+        } catch(parseErr) {
+          throw new Error('JSON parse error — the PDF may not contain enough readable text, or may be a scanned image.');
+        }
 
         // Run sentence repair if needed
         const incomplete = findIncompleteSentences(parsed);
@@ -941,7 +982,7 @@
 
       } catch (err) {
         item.status = 'error';
-        item.error  = err.message;
+        item.error  = batchFriendlyError(err);
         errorCount++;
       }
 
@@ -955,8 +996,15 @@
       summaryEl.className = 'batch-summary';
       summaryEl.innerHTML = `✅ <strong>All ${doneCount} summaries generated and saved.</strong> Check your Downloads folder for the <code style="background:rgba(42,127,111,0.15);padding:0.1rem 0.3rem;border-radius:3px;">.json</code> files — move each one into its Box folder. When you're ready to review or send for review, use the <strong>Load a Saved Session</strong> button below.`;
     } else {
+      // List each failed file with its reason
+      const failedItems = batchFiles.filter(f => f.status === 'error');
+      const failList = failedItems.map(f =>
+        `<li><strong>${f.file.name}:</strong> ${f.error || 'Unknown error'}</li>`
+      ).join('');
       summaryEl.className = 'batch-summary has-errors';
-      summaryEl.innerHTML = `⚠️ <strong>${doneCount} of ${batchFiles.length} succeeded, ${errorCount} failed.</strong> Failed files are marked above — hover the ✕ to see the error. You can fix the issue and click <strong>Run Batch</strong> again; already-completed files will be skipped.`;
+      summaryEl.innerHTML = `⚠️ <strong>${doneCount} of ${batchFiles.length} succeeded, ${errorCount} failed.</strong><br><br>
+        <ul style="margin:0.5rem 0 0.75rem 1.25rem;line-height:1.8;">${failList}</ul>
+        Fix the issues above and click <strong>Retry Failed</strong> — already-completed files will be skipped.`;
     }
 
     runBtn.disabled = false;
