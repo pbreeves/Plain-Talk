@@ -1021,6 +1021,8 @@ Each section should contain 3–5 sentence objects.`;
   }
 
   // ── END BATCH UPLOAD ─────────────────────────────────────────────
+
+  function checkUrlWarning(val) {
     const warn = document.getElementById('urlWarning');
     const isPubmedAbstract = val.includes('pubmed.ncbi.nlm.nih.gov') && !val.includes('pmc.ncbi.nlm.nih.gov');
     warn.style.display = isPubmedAbstract ? 'block' : 'none';
@@ -2888,11 +2890,11 @@ Return ONLY valid JSON, no markdown, no explanation. Example format:
       // in the new top-level tab context, not the SharePoint iframe
       const printHTML = html.replace(
         '</body>',
-        `<script>
+        `\x3Cscript>
           window.addEventListener('load', function() {
             setTimeout(function() { window.print(); }, 400);
           });
-        <\/script>
+        \x3C\/script>
         </body>`
       );
 
