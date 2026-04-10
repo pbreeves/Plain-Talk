@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plain Talk — Research Simplified (SharePoint Edition)</title>
+<title>Plain Talk — Research Simplified (Duke AI Gateway Edition)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -319,18 +319,18 @@
 <div id="spSetupBanner" style="display:none;">
   <div class="sp-setup-banner">
     <button class="sp-setup-close" onclick="dismissSpBanner()">✕ Dismiss</button>
-    <strong>🏢 SharePoint Setup Required</strong>
-    SharePoint's security policy blocks direct calls to external APIs. To run this tool inside SharePoint, you need a small proxy.
+    <strong>🏢 SharePoint Setup Note</strong>
+    SharePoint's security policy may block direct calls to external APIs including the Duke AI Gateway. If the tool isn't working inside SharePoint, you may need a small proxy.
     Follow these steps:
     <ol>
-      <li>Deploy the one-file proxy to Azure (free tier) using <code>proxy-server.js</code> and <code>SHAREPOINT-DEPLOYMENT.md</code> included in this download package — or ask your IT team to host it. Full Azure CLI commands are in the deployment guide.</li>
-      <li>Once deployed, paste your proxy URL below (e.g. <code>https://myproxy.azurewebsites.net/v1/messages</code>).</li>
-      <li>Enter your Anthropic API key — it stays in this browser tab only, never sent to SharePoint servers.</li>
+      <li>Contact Duke OIT to confirm whether <code>litellm.oit.duke.edu</code> is accessible from SharePoint, or deploy a lightweight proxy on Azure.</li>
+      <li>Once you have a proxy URL, paste it below (e.g. <code>https://myproxy.azurewebsites.net/v1/chat/completions</code>).</li>
+      <li>Enter your Duke AI Gateway key — it stays in this browser tab only, never sent to SharePoint servers.</li>
       <li>Embed this HTML file in a SharePoint page using <strong>Edit → Embed web part</strong>, or upload to a Document Library and link it.</li>
     </ol>
-    <strong>Proxy endpoint URL</strong>
+    <strong>Proxy endpoint URL (optional)</strong>
     <div class="sp-proxy-row">
-      <input type="url" id="spProxyInput" placeholder="https://your-proxy.azurewebsites.net/v1/messages" />
+      <input type="url" id="spProxyInput" placeholder="https://your-proxy.azurewebsites.net/v1/chat/completions" />
       <button onclick="saveProxyUrl()">Save Proxy URL</button>
     </div>
     <div class="sp-proxy-status" id="spProxyStatus"></div>
@@ -341,18 +341,18 @@
 <div id="apiKeyBanner" style="display:none;">
   <div class="api-key-banner">
     <p>
-      <strong>Enter your Anthropic API key to get started.</strong>
-      Your key is only stored in this browser tab and is never saved to disk. 
-      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+      <strong>Enter your Duke AI Gateway key to get started.</strong>
+      Your key is only stored in this browser tab and is never saved to disk.
+      Get a key at <a href="https://dashboard.ai.duke.edu" target="_blank">dashboard.ai.duke.edu</a> (Duke login required).
     </p>
     <div class="api-key-banner-input">
       <div style="display:flex;flex-direction:column;gap:0.25rem;">
         <div style="display:flex;gap:0.5rem;">
-          <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." 
+          <input type="password" id="apiKeyInput" placeholder="Paste your Duke AI Gateway key…"
                  onkeydown="if(event.key==='Enter') dismissApiKeyBanner()">
           <button class="btn-set-key" onclick="dismissApiKeyBanner()">Save Key</button>
         </div>
-        <div class="api-key-error" id="apiKeyError">Key should start with "sk-ant-" — please check and try again.</div>
+        <div class="api-key-error" id="apiKeyError">Please enter a valid Duke AI Gateway key.</div>
       </div>
     </div>
   </div>
@@ -362,7 +362,7 @@
   <div class="logo">Plain Talk</div>
   <div class="tagline">Research made readable</div>
   <div style="margin-left:auto;">
-    <span class="api-key-status" onclick="clearApiKey()" title="Change your API key">🔑 API Key</span>
+    <span class="api-key-status" onclick="clearApiKey()" title="Change your Duke AI Gateway key">🔑 Gateway Key</span>
   </div>
 </header>
 
@@ -631,7 +631,7 @@
   // The tool detects if it's running inside SharePoint (or any iframe)
   // and prompts users to configure a proxy endpoint.
 
-  const DEFAULT_API_URL = 'https://api.anthropic.com/v1/messages';
+  const DEFAULT_API_URL = 'https://litellm.oit.duke.edu/v1/chat/completions';
 
   function isInSharePoint() {
     try {
@@ -701,7 +701,7 @@
   }
   function dismissApiKeyBanner() {
     const key = document.getElementById('apiKeyInput').value.trim();
-    if (!key.startsWith('sk-ant-')) {
+    if (key.length < 10) {
       document.getElementById('apiKeyError').style.display = 'block';
       return;
     }
@@ -856,7 +856,7 @@
   }
 
   async function runBatch() {
-    if (!getApiKey()) { showApiKeyBanner(); showError('Please enter your Anthropic API key to continue.'); return; }
+    if (!getApiKey()) { showApiKeyBanner(); showError('Please enter your Duke AI Gateway key to continue.'); return; }
     if (!batchFiles.length) return;
 
     const runBtn = document.getElementById('batchRunBtn');
@@ -880,21 +880,15 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': getApiKey(),
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
+            'Authorization': 'Bearer ' + getApiKey()
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'GPT 4.1',
             max_tokens: 4000,
-            system: buildSystemPrompt(),
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-                { type: 'text', text: 'Please read this clinical research paper and answer the four questions.' }
-              ]
-            }]
+            messages: [
+              { role: 'system', content: buildSystemPrompt() },
+              { role: 'user', content: 'Please read this clinical research paper and answer the four questions.\n\n[PDF content extracted below]\n' + await extractTextFromBase64PDF(base64) }
+            ]
           })
         });
 
@@ -904,7 +898,7 @@
         }
 
         const data  = await response.json();
-        const raw   = data.content.map(b => b.text || '').join('').trim();
+        const raw   = (data.choices?.[0]?.message?.content || '').trim();
         const clean = raw.replace(/```json|```/g, '').trim();
         let parsed  = JSON.parse(clean);
 
@@ -1036,12 +1030,53 @@ Each section should contain 3–5 sentence objects.`;
     return 'medium';
   }
 
+  // ── PDF TEXT EXTRACTION ──────────────────────────────────────────
+  // The Duke AI Gateway uses OpenAI-compatible format and does not
+  // support Anthropic's native PDF document type. We extract text
+  // from the PDF in-browser using PDF.js (loaded from CDN) before
+  // sending to the API.
+
+  async function extractTextFromPdfFile(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    return extractTextFromArrayBuffer(arrayBuffer);
+  }
+
+  async function extractTextFromBase64PDF(base64) {
+    const binary = atob(base64);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return extractTextFromArrayBuffer(bytes.buffer);
+  }
+
+  async function extractTextFromArrayBuffer(buffer) {
+    // Dynamically load PDF.js if not already loaded
+    if (!window.pdfjsLib) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF.js'));
+        document.head.appendChild(script);
+      });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const pdf   = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+    let text    = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    return text.slice(0, 60000); // stay within token limits
+  }
+
   async function summarize() {
     hideError();
 
     if (!getApiKey()) {
       showApiKeyBanner();
-      showError('Please enter your Anthropic API key to continue.');
+      showError('Please enter your Duke AI Gateway key to continue.');
       return;
     }
 
@@ -1108,22 +1143,38 @@ Each section should contain 3–5 sentence objects.`;
       content = { type: 'text', text: articleText.slice(0, 60000) };
     } else if (activeTab === 'pdf') {
       if (!pdfBase64) { showError('Please select a PDF file first.'); return; }
+      // Extract text from PDF for Gateway (OpenAI format doesn't support native PDF documents)
+      document.getElementById('inputPanel').style.display = 'none';
+      document.getElementById('loadingState').classList.add('visible');
+      document.getElementById('loadingHint').textContent = 'Extracting text from PDF…';
+      document.getElementById('submitBtn').disabled = true;
+      try {
+        const pdfText = await extractTextFromBase64PDF(pdfBase64);
+        if (pdfText.trim().length < 500) {
+          document.getElementById('inputPanel').style.display = '';
+          document.getElementById('loadingState').classList.remove('visible');
+          document.getElementById('submitBtn').disabled = false;
+          showError('Not enough readable text found in this PDF. This can happen with scanned PDFs. Please copy and paste the paper text in the Paste Text tab instead.');
+          return;
+        }
+        content = { type: 'text', text: pdfText };
+      } catch (pdfErr) {
+        document.getElementById('inputPanel').style.display = '';
+        document.getElementById('loadingState').classList.remove('visible');
+        document.getElementById('submitBtn').disabled = false;
+        showError('Could not extract text from this PDF: ' + pdfErr.message);
+        return;
+      }
     }
 
     const systemPrompt = buildSystemPrompt();
 
     let userContent;
-    if (activeTab === 'pdf') {
-      userContent = [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
-        { type: 'text', text: 'Please read this clinical research paper and answer the four questions.' }
-      ];
-    } else {
-      userContent = content.text;
-    }
+    // All tabs now provide text content (PDF text is extracted above)
+    userContent = content.text;
 
-    // URL tab already showed loading state during fetch; only show for other tabs
-    if (activeTab !== 'url') {
+    // URL and PDF tabs already showed loading state during fetch/extraction
+    if (activeTab === 'text') {
       document.getElementById('inputPanel').style.display = 'none';
       document.getElementById('loadingState').classList.add('visible');
       document.getElementById('submitBtn').disabled = true;
@@ -1145,15 +1196,15 @@ Each section should contain 3–5 sentence objects.`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': getApiKey(),
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
+          'Authorization': 'Bearer ' + getApiKey()
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'GPT 4.1',
           max_tokens: 4000,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userContent }]
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: typeof userContent === 'string' ? userContent : 'Please read this clinical research paper and answer the four questions.' }
+          ]
         })
       });
 
@@ -1161,7 +1212,7 @@ Each section should contain 3–5 sentence objects.`;
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message || 'API error');
 
-      const raw = data.content.map(b => b.text || '').join('').trim();
+      const raw = (data.choices?.[0]?.message?.content || '').trim();
       const clean = raw.replace(/```json|```/g, '').trim();
 
       let parsed;
@@ -1266,12 +1317,10 @@ Return ONLY valid JSON, no markdown, no explanation. Example format:
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': getApiKey(),
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
+        'Authorization': 'Bearer ' + getApiKey()
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'GPT 4.1',
         max_tokens: 1000,
         messages: [{ role: 'user', content: repairPrompt }]
       })
@@ -1279,7 +1328,7 @@ Return ONLY valid JSON, no markdown, no explanation. Example format:
 
     if (!response.ok) throw new Error('Repair API call failed');
     const data = await response.json();
-    const raw  = data.content.map(b => b.text || '').join('').trim();
+    const raw  = (data.choices?.[0]?.message?.content || '').trim();
     const clean = raw.replace(/```json|```/g, '').trim();
     const repairs = JSON.parse(clean);
 
