@@ -680,6 +680,30 @@
       }
     }
     if (!getApiKey()) showApiKeyBanner();
+
+    // ── Drop zone listeners (inside DOMContentLoaded to guarantee DOM is ready) ──
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') {
+        document.getElementById('fileName').textContent = '✓ ' + file.name;
+        const reader = new FileReader();
+        reader.onload = () => { pdfBase64 = reader.result.split(',')[1]; };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    const batchDropZone = document.getElementById('batchDropZone');
+    batchDropZone.addEventListener('dragover', e => { e.preventDefault(); batchDropZone.classList.add('dragover'); });
+    batchDropZone.addEventListener('dragleave', () => batchDropZone.classList.remove('dragover'));
+    batchDropZone.addEventListener('drop', e => {
+      e.preventDefault(); batchDropZone.classList.remove('dragover');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+      if (files.length) initBatchQueue(files);
+    });
   });
 
   // ── API KEY MANAGEMENT ───────────────────────────────────────────
@@ -752,32 +776,9 @@
     reader.readAsDataURL(file);
   }
 
-  const dropZone = document.getElementById('dropZone');
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault(); dropZone.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      document.getElementById('fileName').textContent = '✓ ' + file.name;
-      const reader = new FileReader();
-      reader.onload = () => { pdfBase64 = reader.result.split(',')[1]; };
-      reader.readAsDataURL(file);
-    }
-  });
-
   // ── BATCH UPLOAD ─────────────────────────────────────────────────
 
   let batchFiles = []; // Array of { file, nct, status, error }
-
-  const batchDropZone = document.getElementById('batchDropZone');
-  batchDropZone.addEventListener('dragover', e => { e.preventDefault(); batchDropZone.classList.add('dragover'); });
-  batchDropZone.addEventListener('dragleave', () => batchDropZone.classList.remove('dragover'));
-  batchDropZone.addEventListener('drop', e => {
-    e.preventDefault(); batchDropZone.classList.remove('dragover');
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
-    if (files.length) initBatchQueue(files);
-  });
 
   function handleBatchSelect(event) {
     const files = Array.from(event.target.files);
@@ -1011,6 +1012,8 @@ Each section should contain 3–5 sentence objects.`;
   }
 
   // ── END BATCH UPLOAD ─────────────────────────────────────────────
+
+  function checkUrlWarning(val) {
     const warn = document.getElementById('urlWarning');
     const isPubmedAbstract = val.includes('pubmed.ncbi.nlm.nih.gov') && !val.includes('pmc.ncbi.nlm.nih.gov');
     warn.style.display = isPubmedAbstract ? 'block' : 'none';
